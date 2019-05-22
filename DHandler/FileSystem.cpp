@@ -1,6 +1,3 @@
-//
-// Created by aseleznev on 23.04.2019.
-//
 #include "FileSystem.h"
 
 FileSystem::FileSystem(const HANDLE & fHandle)
@@ -11,8 +8,10 @@ FileSystem::FileSystem(const HANDLE & fHandle)
     bytesPerSector = 0;
     sectorsPerCluster = 0;
     bytesPerCluster = 0;
+	clusterHeapOffset = 0;
     currentOffset = NULL;
 }
+
 void FileSystem::FileSystemInfo()
 {
     printf("File system name:%s\n", OEM_ID);
@@ -22,36 +21,37 @@ void FileSystem::FileSystemInfo()
     wprintf(L"Total clusters:%llu\n", totalClusters);
 }
 
-BYTE * FileSystem::ReadClusters(const ULONGLONG & startCluster, const DWORD & numberOfClusters)
+Buffer FileSystem::ReadClusters(const ULONGLONG & startCluster, const DWORD & numberOfClusters)
 {
-    if (startCluster >= 0 and startCluster <= totalClusters)
-    {
-        DWORD errorCode;
-        DWORD bytesReturned = 0;
-        DWORD bytesToRead = bytesPerCluster * numberOfClusters;
-        BYTE * outBuffer = new BYTE[bytesToRead];
-        LARGE_INTEGER sectorOffset;
-        sectorOffset.QuadPart = startCluster * bytesPerCluster;
-        if (!SetFilePointerEx(fileHandle, sectorOffset, currentOffset, FILE_BEGIN)) {
-            errorCode = GetLastError();
-            CloseHandle(fileHandle);
-            exit(errorCode);
-        }
-        bool readResult = ReadFile(fileHandle, outBuffer, bytesToRead, &bytesReturned, NULL);
-        if(!readResult || bytesReturned != bytesToRead) {
-            errorCode = GetLastError();
-            CloseHandle(fileHandle);
-            exit(errorCode);
-        }
-    return outBuffer;
-    }
-    else
-        return NULL;
+	if (startCluster >= 0 and startCluster <= totalClusters)
+	{
+		DWORD errorCode;
+		DWORD bytesReturned = 0;
+		DWORD bytesToRead = bytesPerCluster * numberOfClusters;
+		Buffer readBuffer(new BYTE[bytesToRead], bytesToRead);
+		BYTE * outBuffer = readBuffer.GetBuffer();
+		LARGE_INTEGER sectorOffset;
+		sectorOffset.QuadPart = startCluster * bytesPerCluster;
+		if (!SetFilePointerEx(fileHandle, sectorOffset, currentOffset, FILE_BEGIN)) {
+			errorCode = GetLastError();
+			CloseHandle(fileHandle);
+			exit(errorCode);
+		}
+		bool readResult = ReadFile(fileHandle, outBuffer, bytesToRead, &bytesReturned, NULL);
+		if (!readResult || bytesReturned != bytesToRead) {
+			errorCode = GetLastError();
+			CloseHandle(fileHandle);
+			exit(errorCode);
+		}
+		return readBuffer;
+	}
+	else
+		return Buffer();
 }
 
-BUFFER FileSystem::FSReadFile()
+Buffer FileSystem::FSReadFile()
 {
-	return NULL;
+	return Buffer();
 }
 
 ULONGLONG FileSystem::GetTotalClusters()
@@ -69,8 +69,24 @@ ULONGLONG FileSystem::GetTotalSectors()
     return totalClusters * sectorsPerCluster;
 }
 
+void FileSystem::PrintBuffer(Buffer fileSystemBuffer)
+{
+	std::size_t bufferSize = fileSystemBuffer.GetBufferSize();
+	BYTE * bufferIterator = fileSystemBuffer.GetBuffer();
+	for (std::size_t count = 0; count < bufferSize; count++)
+	{
+		std::cout << std::setw(2) << std::setfill('0') << std::hex << DWORD(*bufferIterator) << " ";
+		bufferIterator++;
+	}
+}
+
+ULONGLONG FileSystem::GetClusterOffset()
+{
+	return clusterHeapOffset;
+}
+
 FileSystem::~FileSystem()
 {
-    CloseHandle(fileHandle);
+	fileHandle = NULL;
 }
 

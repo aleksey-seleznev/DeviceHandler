@@ -1,6 +1,3 @@
-//
-// Created by aseleznev on 24.04.2019.
-//
 #include "DeviceHandler.h"
 
 DeviceHandler::DeviceHandler()
@@ -71,7 +68,7 @@ void DeviceHandler::GetSystemVolumes()
 void DeviceHandler::GetDiskGeometry(DISK_GEOMETRY & diskGeometry, HANDLE & hDevice)
 {
     if(!DeviceIoControl(hDevice, IOCTL_DISK_GET_DRIVE_GEOMETRY, NULL, 0,
-                        &diskGeometry, sizeof(diskGeometry), &bytesReturned, NULL)){
+								&diskGeometry, sizeof(diskGeometry), &bytesReturned, NULL)){
         errorCode = GetLastError();
         CloseHandle(hDevice);
         exit(errorCode);
@@ -90,11 +87,12 @@ HANDLE DeviceHandler::CreateHandle(WCHAR * volumeName)
     return diskHandle;
 }
 
-BYTE * DeviceHandler::ReadFileSystem(HANDLE & hDevice, ULONGLONG & recordOffset, DWORD & bytesToRead)
+Buffer DeviceHandler::ReadFileSystem(HANDLE & hDevice, ULONGLONG & recordOffset, DWORD & bytesToRead)
 {
     LARGE_INTEGER sectorOffset;
     sectorOffset.QuadPart = recordOffset;
-    BYTE * recordBuffer = new BYTE[bytesToRead];
+	Buffer readBuffer(new BYTE[bytesToRead], bytesToRead);
+	BYTE * recordBuffer = readBuffer.GetBuffer();
     currentOffset = SetFilePointer(hDevice, sectorOffset.LowPart, &sectorOffset.HighPart, FILE_BEGIN);
     if (currentOffset != sectorOffset.LowPart) {
         errorCode = GetLastError();
@@ -107,28 +105,19 @@ BYTE * DeviceHandler::ReadFileSystem(HANDLE & hDevice, ULONGLONG & recordOffset,
         CloseHandle(hDevice);
         exit(errorCode);
     }
-    return recordBuffer;
+    return readBuffer;
 }
 
-PFileSystem DeviceHandler::GetFileSystem(WCHAR *volumeName)
+pFileSystemHandler DeviceHandler::GetFileSystemHandler(WCHAR *volumeName)
 {
     hDevice = CreateHandle(volumeName);
     ULONGLONG bootRecordOffset = 0;
     GetDiskGeometry(diskGeometry, hDevice);
-    BYTE * recordBuffer = ReadFileSystem(hDevice, bootRecordOffset, diskGeometry.BytesPerSector);
-    CommonFileRecord * bootRecordBuffer = (CommonFileRecord *) recordBuffer;
-    BYTE * OEM = bootRecordBuffer->OEM_ID;
-    if (!(_mbscmp(OEM, (BYTE*) _NTFS))) {
-        return PFileSystem(new NTFS(hDevice, recordBuffer));
-    }
-    else {
-        if (!(_mbscmp(OEM, (BYTE *) _exFAT)))
-            return PFileSystem(new exFAT(hDevice, recordBuffer));
-    }
-    hDevice = NULL;
+    Buffer recordBuffer = ReadFileSystem(hDevice, bootRecordOffset, diskGeometry.BytesPerSector);
+	return pFileSystemHandler(FileSystemFactory::CreateFileSystemHandler(hDevice, recordBuffer));
 }
 
 DeviceHandler::~DeviceHandler()
 {
-
+	hDevice = NULL;
 }
