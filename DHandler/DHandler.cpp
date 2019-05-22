@@ -28,4 +28,5 @@ int main()
 		FileSystem::PrintBuffer(clusterIterator.GetCurrent());
 	}
 	clusterIterator.ResetRange();
+	system("pause");
 }
